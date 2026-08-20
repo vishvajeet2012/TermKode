@@ -76,7 +76,7 @@ export type NeoLensSearchResult = {
   scannedFiles: number;
 };
 
-type IgnoreRule = {
+export type IgnoreRule = {
   pattern: string;
   negate: boolean;
   directoryOnly: boolean;
@@ -264,7 +264,7 @@ async function readFilePrefix(path: string, limit: number) {
   }
 }
 
-async function loadGitIgnoreRules(root: string): Promise<IgnoreRule[]> {
+export async function loadGitIgnoreRules(root: string): Promise<IgnoreRule[]> {
   try {
     const source = await readFile(resolve(root, ".gitignore"), "utf8");
     return source.split(/\r?\n/).flatMap((rawLine) => {
@@ -283,7 +283,7 @@ async function loadGitIgnoreRules(root: string): Promise<IgnoreRule[]> {
   }
 }
 
-function isGitIgnored(path: string, directory: boolean, rules: readonly IgnoreRule[]) {
+export function isGitIgnored(path: string, directory: boolean, rules: readonly IgnoreRule[]) {
   let ignored = false;
   for (const rule of rules) {
     if (rule.directoryOnly && !directory && !path.includes(`${rule.pattern}/`)) continue;

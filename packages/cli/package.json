@@ -1,6 +1,6 @@
 {
   "name": "@termkode/cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "module": "src/index.tsx",
   "type": "module",
   "private": true,

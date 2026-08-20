@@ -9,6 +9,7 @@ import {
   type ModeType,
 } from "@termkode/shared";
 import { getShellCommand } from "@termkode/server";
+import { InvalidPatternError, searchFiles } from "./search";
 import { getTermkodeHome } from "./env";
 import {
   killBackgroundShell,
@@ -258,59 +259,32 @@ export async function executeLocalTool(
     case "grep": {
       const { pattern, path, include } = toolInputSchemas.grep.parse(input);
       const { cwd, resolved } = resolveInsideCwd(path);
-      const args = [
-        "-rn",
-        "--color=never",
-        "--exclude-dir=node_modules",
-        "--exclude-dir=.git",
-        "-E",
-      ];
-      if (include) args.push(`--include=${include}`);
-      args.push(pattern, resolved);
 
-      const proc = Bun.spawn(["grep", ...args], {
-        cwd,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      const [stdout, stderr] = await Promise.all([
-        readStream(proc.stdout),
-        readStream(proc.stderr),
-      ]);
-      const exitCode = await proc.exited;
+      try {
+        const { matches, truncated, filesScanned } = await searchFiles({
+          root: resolved,
+          cwd,
+          pattern,
+          ...(include ? { include } : {}),
+          maxMatches: MAX_MATCHES,
+        });
 
-      if (exitCode !== 0 && exitCode !== 1) {
-        throw new Error(`grep failed: ${stderr.trim()}`);
-      }
-      if (!stdout.trim()) {
-        return { matches: [], message: "No matches found" };
-      }
-
-      const lines = stdout.split("\n").filter(Boolean);
-      const matches: { file: string; line: number; content: string }[] = [];
-      let truncated = false;
-
-      for (const line of lines) {
-        if (matches.length >= MAX_MATCHES) {
-          truncated = true;
-          break;
+        if (matches.length === 0) {
+          return { matches: [], message: `No matches found in ${filesScanned} files` };
         }
-        const match = line.match(/^(.+?):(\d+):(.*)$/);
-        if (match) {
-          matches.push({
-            file: relative(cwd, match[1]!),
-            line: Number(match[2]),
-            content: match[3]!,
-          });
-        }
-      }
 
-      return {
-        matches,
-        ...(truncated
-          ? { truncated: true, totalMatches: lines.length }
-          : {}),
-      };
+        return {
+          matches,
+          ...(truncated ? { truncated: true } : {}),
+        };
+      } catch (error) {
+        // An unparseable pattern is the model's mistake to correct, so it is
+        // reported as such rather than as a failed search.
+        if (error instanceof InvalidPatternError) throw error;
+        throw new Error(
+          `Search failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
 
     case "writeFile": {

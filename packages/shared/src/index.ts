@@ -95,6 +95,9 @@ export {
 export {
   assertSafeWorkspaceRoot,
   buildWorkspaceIndex,
+  isGitIgnored,
+  loadGitIgnoreRules,
+  type IgnoreRule,
   readWorkspaceFile,
   searchWorkspace,
   type NeoLensFilePreview,
