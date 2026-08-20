@@ -18,6 +18,7 @@ import { useDialog } from "../providers/dialog";
 import { useTheme } from "../providers/theme";
 import { usePromptConfig } from "../providers/prompt-config";
 import { useSessionActions } from "../providers/session-actions";
+import { useClipboardPaste } from "../hooks/use-clipboard-paste";
 import { findCustomCommand, renderCustomCommand } from "../lib/custom-commands";
 import { Mode } from "@termkode/shared";
 
@@ -544,6 +545,20 @@ export function InputBar({ onSubmit, disabled = false }: Props) {
 
     handleSubmit();
   };
+
+  // The prompt has the same problem the API key field does: on a terminal
+  // without bracketed paste, ctrl+v reaches the application instead of pasting.
+  useClipboardPaste({
+    enabled: !disabled && isTopLayer("base"),
+    onPaste: (text) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      textarea.insertText(text);
+      handleTextareaContentChange();
+    },
+    onError: (message) => toast.show({ variant: "error", message }),
+  });
 
   useKeyboard((key) => {
     if (disabled) return;

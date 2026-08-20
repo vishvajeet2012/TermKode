@@ -8,6 +8,8 @@ import { useDialog } from "../../providers/dialog";
 import { useToast } from "../../providers/toast";
 import { usePromptConfig } from "../../providers/prompt-config";
 import { useKeyboardLayer } from "../../providers/keyboard-layer";
+import { useClipboardPaste } from "../../hooks/use-clipboard-paste";
+import { toSingleLine } from "../../lib/clipboard";
 import { DialogSearchList } from "../dialog-search-list";
 
 type ProvidersState = InferResponseType<typeof apiClient.providers.$get, 200>;
@@ -54,6 +56,18 @@ function CredentialStep({
 }: CredentialStepProps) {
   const inputRef = useRef<InputRenderable>(null);
   const { isTopLayer } = useKeyboardLayer();
+  const [pasteError, setPasteError] = useState<string | null>(null);
+
+  // Not every terminal delivers a paste to the application, and a key that
+  // will not paste is the most common way this step goes wrong.
+  useClipboardPaste({
+    enabled: isTopLayer("dialog") && !busy,
+    onPaste: (text) => {
+      setPasteError(null);
+      inputRef.current?.insertText(toSingleLine(text));
+    },
+    onError: setPasteError,
+  });
 
   useKeyboard((key) => {
     if (!isTopLayer("dialog") || busy) return;
@@ -72,7 +86,12 @@ function CredentialStep({
       <input ref={inputRef} focused={!busy} placeholder={placeholder} />
       {busy && busyText && <text attributes={TextAttributes.DIM}>{busyText}</text>}
       {error && <text fg="red">{error}</text>}
-      <text attributes={TextAttributes.DIM}>{footer}</text>
+      {pasteError && <text fg="red">{pasteError}</text>}
+      <text attributes={TextAttributes.DIM}>ctrl+v paste · {footer}</text>
+      <text attributes={TextAttributes.DIM}>
+        Paste not working? Some terminals use shift+insert or right-click, or you
+        can set the value as an environment variable instead.
+      </text>
     </box>
   );
 }
