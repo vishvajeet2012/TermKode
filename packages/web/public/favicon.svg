@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>TermKode logo</title>
+  <defs>
+    <linearGradient id="mark" x1="15" y1="15" x2="49" y2="51" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8290aa"/>
+      <stop offset="1" stop-color="#f3f7ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#071327"/>
+  <rect x=".5" y=".5" width="63" height="63" rx="13.5" fill="none" stroke="#89b4fa" stroke-opacity=".22"/>
+  <path
+    d="M15 15h34M28 21h8M28 27h8M28 33h8M28 39h8M28 45h8M28 51h8"
+    fill="none"
+    stroke="url(#mark)"
+    stroke-linecap="round"
+    stroke-width="4"
+  />
+</svg>

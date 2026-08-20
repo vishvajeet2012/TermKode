@@ -1,0 +1,207 @@
+import { findProvider } from "@termkode/shared";
+import { detectLocalRuntime } from "./local-ai";
+import { resolveProviderCredentials } from "./settings";
+
+// Model lists are read from each provider at runtime, so a newly released model
+// shows up in `/models` without a TermKode release.
+export type ModelCatalogEntry = {
+  ref: string;
+  providerId: string;
+  providerLabel: string;
+  modelId: string;
+};
+
+export type ProviderModels = {
+  models: string[];
+  source: "remote" | "fallback";
+};
+
+const LISTING_TIMEOUT_MS = 8_000;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+const cache = new Map<string, { fetchedAt: number; value: ProviderModels }>();
+
+export class ProviderRequestError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+    this.name = "ProviderRequestError";
+  }
+}
+
+function parseModelList(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") return [];
+
+  const data = (payload as { data?: unknown }).data;
+  const entries = Array.isArray(data) ? data : [];
+
+  return entries
+    .map((entry) => (entry && typeof entry === "object" ? (entry as { id?: unknown }).id : null))
+    .filter((id): id is string => typeof id === "string" && id.length > 0)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+async function requestModelList(providerId: string): Promise<string[]> {
+  const provider = findProvider(providerId);
+  const credentials = resolveProviderCredentials(providerId);
+  if (!provider || !credentials) {
+    throw new ProviderRequestError(`Unknown provider: ${providerId}`);
+  }
+
+  const headers: Record<string, string> = provider.kind === "anthropic"
+    ? {
+        "x-api-key": credentials.apiKey ?? "",
+        "anthropic-version": "2023-06-01",
+      }
+    : credentials.apiKey
+      ? { Authorization: `Bearer ${credentials.apiKey}` }
+      : {};
+
+  let response: Response;
+  try {
+    response = await fetch(`${credentials.baseUrl}/models`, {
+      headers,
+      signal: AbortSignal.timeout(LISTING_TIMEOUT_MS),
+    });
+  } catch {
+    throw new ProviderRequestError(
+      `Could not reach ${provider.label}. Check your connection and base URL.`,
+    );
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new ProviderRequestError(`${provider.label} rejected this API key.`, response.status);
+  }
+
+  if (!response.ok) {
+    throw new ProviderRequestError(
+      `${provider.label} returned ${response.status} while listing models.`,
+      response.status,
+    );
+  }
+
+  return parseModelList(await response.json());
+}
+
+export async function getProviderModels(
+  providerId: string,
+  options: { refresh?: boolean } = {},
+): Promise<ProviderModels> {
+  const provider = findProvider(providerId);
+  if (!provider) {
+    throw new ProviderRequestError(`Unknown provider: ${providerId}`);
+  }
+
+  if (!options.refresh) {
+    const cached = cache.get(providerId);
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+      return cached.value;
+    }
+  }
+
+  if (provider.isLocal) {
+    const runtime = await detectLocalRuntime({ refresh: options.refresh });
+    const value: ProviderModels = {
+      models: runtime?.models ?? [],
+      source: runtime ? "remote" : "fallback",
+    };
+
+    cache.set(providerId, { fetchedAt: Date.now(), value });
+    return value;
+  }
+
+  try {
+    const models = await requestModelList(providerId);
+    const value: ProviderModels = models.length > 0
+      ? { models, source: "remote" }
+      : { models: [...provider.fallbackModels], source: "fallback" };
+
+    cache.set(providerId, { fetchedAt: Date.now(), value });
+    return value;
+  } catch (error) {
+    // A rejected key is a real setup failure and must surface. Anything else
+    // (no listing endpoint, offline) falls back to the built-in list.
+    if (error instanceof ProviderRequestError && (error.status === 401 || error.status === 403)) {
+      throw error;
+    }
+
+    const value: ProviderModels = {
+      models: [...provider.fallbackModels],
+      source: "fallback",
+    };
+
+    cache.set(providerId, { fetchedAt: Date.now(), value });
+    return value;
+  }
+}
+
+// Saving a key is only useful if it works, so confirm it against the provider
+// before writing it to disk.
+export async function verifyProviderCredentials(providerId: string) {
+  const provider = findProvider(providerId);
+  if (!provider) {
+    throw new ProviderRequestError(`Unknown provider: ${providerId}`);
+  }
+
+  if (provider.isLocal) {
+    const runtime = await detectLocalRuntime({ refresh: true });
+    if (!runtime) {
+      throw new ProviderRequestError(
+        "No local AI server found. Start Ollama, LM Studio, llama.cpp, vLLM, or Jan and try again.",
+      );
+    }
+
+    return { models: runtime.models, source: "remote" as const };
+  }
+
+  const models = await requestModelList(providerId);
+  const resolved = models.length > 0 ? models : [...provider.fallbackModels];
+
+  // Some providers list their models publicly, so a successful listing proves
+  // nothing about the key. Spend one tiny completion to find out.
+  if (provider.publicModelListing) {
+    await requestSmallestCompletion(providerId, resolved[0]);
+  }
+
+  return models.length > 0
+    ? { models, source: "remote" as const }
+    : { models: resolved, source: "fallback" as const };
+}
+
+async function requestSmallestCompletion(providerId: string, modelId: string | undefined) {
+  const provider = findProvider(providerId);
+  const credentials = resolveProviderCredentials(providerId);
+  if (!provider || !credentials || !modelId) return;
+
+  let response: Response;
+  try {
+    response = await fetch(`${credentials.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(credentials.apiKey ? { Authorization: `Bearer ${credentials.apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: "user", content: "hi" }],
+        max_tokens: 1,
+      }),
+      signal: AbortSignal.timeout(LISTING_TIMEOUT_MS),
+    });
+  } catch {
+    // The key may still be fine; a network hiccup must not reject it.
+    return;
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new ProviderRequestError(`${provider.label} rejected this API key.`, response.status);
+  }
+}
+
+export function clearModelCache(providerId?: string) {
+  if (providerId) {
+    cache.delete(providerId);
+    return;
+  }
+
+  cache.clear();
+}
