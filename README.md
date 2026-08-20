@@ -39,7 +39,7 @@ termkode
   shown for approval first, and a checkpoint is taken before each file is
   touched, so `/rewind` puts it back.
 - **No account system.** Nothing to sign up for. Nothing phones home.
-- **Your key, your bill.** Sixteen providers, or a local model for free.
+- **Your key, your bill.** Seventeen providers, or a local model for free.
 - **Local models are first class.** Ollama, LM Studio, llama.cpp, vLLM, and Jan
   are detected automatically — no key, no configuration, no internet.
 - **Model lists are live.** New models appear in `/models` the day the provider
@@ -120,10 +120,20 @@ only by your user. Switch models any time with `/models`.
 | Cerebras | `CEREBRAS_API_KEY` | https://cloud.cerebras.ai |
 | Together AI | `TOGETHER_API_KEY` | https://api.together.ai/settings/api-keys |
 | GLM (Z.ai) | `ZAI_API_KEY` | https://z.ai/manage-apikey/apikey-list |
+| Cloudflare (Workers AI) | `CLOUDFLARE_API_TOKEN` | https://dash.cloudflare.com/profile/api-tokens |
 | **Local AI** | none | detected automatically |
 
 Environment variables are read from the shell, a project `.env`, or
 `~/.termkode/.env`. They are handy for CI; `/providers` is easier day to day.
+
+Cloudflare is reached through an account-scoped URL, so it asks for a
+`CLOUDFLARE_ACCOUNT_ID` as well as a token — `/providers` prompts for both, and
+the id is the one in your dashboard URL after `/accounts/`. Its catalogue lives
+on a different endpoint from the chat API, so TermKode reads it from there and
+lists only text-generation models. Pick one Cloudflare documents as
+function-calling capable, such as `@cf/openai/gpt-oss-120b` or
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast`: a model that cannot call tools
+cannot read your files or run your tests.
 
 ### Local models
 

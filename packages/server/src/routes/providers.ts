@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { CHAT_PROVIDERS, findProvider, formatModelRef } from "@termkode/shared";
+import {
+  CHAT_PROVIDERS,
+  findProvider,
+  formatModelRef,
+  providerNeedsAccountId,
+} from "@termkode/shared";
 import { detectLocalRuntime } from "../lib/local-ai";
 import {
   clearModelCache,
@@ -20,6 +25,9 @@ import {
 const credentialsSchema = z.object({
   apiKey: z.string().trim().min(1).optional(),
   baseUrl: z.string().trim().url().optional(),
+  // Cloudflare account ids are 32 hex characters; the check stays loose so a
+  // future format is not rejected here.
+  accountId: z.string().trim().min(1).max(128).optional(),
 });
 
 const modelListQuerySchema = z.object({
@@ -52,7 +60,7 @@ const app = new Hono()
       const credentials = resolveProviderCredentials(provider.id);
       const detected = provider.isLocal ? localRuntime !== null : undefined;
       const ready = provider.requiresApiKey
-        ? Boolean(credentials?.apiKey)
+        ? Boolean(credentials?.apiKey) && !credentials?.accountIdMissing
         : Boolean(detected);
 
       return {
@@ -68,6 +76,13 @@ const app = new Hono()
           : credentials?.baseUrl ?? provider.defaultBaseUrl,
         keySource: credentials?.source ?? "none",
         ready,
+        // The setup dialog asks for this before the key when a provider is
+        // scoped to one account.
+        accountIdLabel: provider.accountId?.label ?? null,
+        accountIdHelp: provider.accountId?.help ?? null,
+        accountIdEnvVar: provider.accountId?.envVars[0] ?? null,
+        needsAccountId: providerNeedsAccountId(provider),
+        hasAccountId: Boolean(credentials?.accountId),
         ...(provider.isLocal
           ? {
               detected: Boolean(detected),
@@ -159,10 +174,17 @@ const app = new Hono()
       return c.json({ error: `Unknown provider: ${providerId}` }, 404);
     }
 
-    const { apiKey, baseUrl } = c.req.valid("json");
+    const { apiKey, baseUrl, accountId } = c.req.valid("json");
 
     if (provider.requiresApiKey && !apiKey) {
       return c.json({ error: `${provider.label} needs an API key` }, 400);
+    }
+
+    if (providerNeedsAccountId(provider) && !accountId && !baseUrl) {
+      return c.json(
+        { error: `${provider.label} needs an ${provider.accountId?.label ?? "account id"}` },
+        400,
+      );
     }
 
     // Write first so verification uses the new values, then roll back when the
@@ -171,6 +193,7 @@ const app = new Hono()
     saveProviderSettings(providerId, {
       ...(apiKey ? { apiKey } : {}),
       ...(baseUrl ? { baseUrl } : {}),
+      ...(accountId ? { accountId } : {}),
     });
     clearModelCache(providerId);
 
@@ -185,10 +208,11 @@ const app = new Hono()
         })),
       });
     } catch (error) {
+      // Settings are merged, not replaced, so restoring `previous` on its own
+      // would leave behind any field this attempt introduced. Clear first.
+      removeProviderSettings(providerId);
       if (previous) {
         saveProviderSettings(providerId, previous);
-      } else {
-        removeProviderSettings(providerId);
       }
       clearModelCache(providerId);
 

@@ -62,6 +62,7 @@ describe("model references", () => {
       "cerebras",
       "together",
       "zai",
+      "cloudflare",
       "local",
     ]);
     expect(findProvider("local")?.requiresApiKey).toBe(false);

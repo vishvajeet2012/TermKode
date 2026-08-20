@@ -1,4 +1,4 @@
-import { findProvider } from "@termkode/shared";
+import { findProvider, isAccountIdMissing } from "@termkode/shared";
 import { detectLocalRuntime } from "./local-ai";
 import { resolveProviderCredentials } from "./settings";
 
@@ -26,6 +26,29 @@ export class ProviderRequestError extends Error {
     super(message);
     this.name = "ProviderRequestError";
   }
+}
+
+// Cloudflare answers with its own envelope: { result: [{ name: "@cf/...", task }] }.
+// Only text-generation models can drive a chat, and the shape is read
+// defensively so a change to it degrades to the built-in list rather than
+// throwing.
+function parseCloudflareModelList(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") return [];
+
+  const result = (payload as { result?: unknown }).result;
+  if (!Array.isArray(result)) return [];
+
+  return result
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .filter((entry) => {
+      const task = entry.task;
+      if (!task || typeof task !== "object") return true;
+      const name = (task as { name?: unknown }).name;
+      return typeof name !== "string" || name.toLowerCase() === "text generation";
+    })
+    .map((entry) => entry.name)
+    .filter((name): name is string => typeof name === "string" && name.length > 0)
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function parseModelList(payload: unknown): string[] {
@@ -56,9 +79,22 @@ async function requestModelList(providerId: string): Promise<string[]> {
       ? { Authorization: `Bearer ${credentials.apiKey}` }
       : {};
 
+  if (credentials.accountIdMissing) {
+    throw new ProviderRequestError(
+      `${provider.label} needs an ${provider.accountId?.label ?? "account id"} before it can be used.`,
+    );
+  }
+
+  // Workers AI has no OpenAI-style /models route - a GET there answers 405 -
+  // so its catalogue is read from the account endpoint that does serve one.
+  const cloudflare = provider.modelListing === "cloudflare";
+  const url = cloudflare
+    ? `${credentials.baseUrl.replace(/\/ai\/v1\/?$/, "/ai/models/search")}?per_page=200`
+    : `${credentials.baseUrl}/models`;
+
   let response: Response;
   try {
-    response = await fetch(`${credentials.baseUrl}/models`, {
+    response = await fetch(url, {
       headers,
       signal: AbortSignal.timeout(LISTING_TIMEOUT_MS),
     });
@@ -72,6 +108,15 @@ async function requestModelList(providerId: string): Promise<string[]> {
     throw new ProviderRequestError(`${provider.label} rejected this API key.`, response.status);
   }
 
+  // A wrong account id is a 404 here, and it is worth saying so plainly: it is
+  // the one credential the user typed by hand rather than pasted.
+  if (cloudflare && response.status === 404) {
+    throw new ProviderRequestError(
+      `${provider.label} did not recognise that ${provider.accountId?.label ?? "account id"}, or the token cannot read it.`,
+      response.status,
+    );
+  }
+
   if (!response.ok) {
     throw new ProviderRequestError(
       `${provider.label} returned ${response.status} while listing models.`,
@@ -79,7 +124,8 @@ async function requestModelList(providerId: string): Promise<string[]> {
     );
   }
 
-  return parseModelList(await response.json());
+  const payload = await response.json();
+  return cloudflare ? parseCloudflareModelList(payload) : parseModelList(payload);
 }
 
 export async function getProviderModels(

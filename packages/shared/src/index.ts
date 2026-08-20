@@ -1,6 +1,10 @@
 export {
+  ACCOUNT_ID_PLACEHOLDER,
   CHAT_PROVIDERS,
+  applyAccountId,
   findProvider,
+  isAccountIdMissing,
+  providerNeedsAccountId,
   findModelPricing,
   describeModelRef,
   formatModelRef,

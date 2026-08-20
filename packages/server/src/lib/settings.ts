@@ -1,6 +1,12 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CHAT_PROVIDERS, findProvider } from "@termkode/shared";
+import {
+  CHAT_PROVIDERS,
+  applyAccountId,
+  findProvider,
+  isAccountIdMissing,
+  providerNeedsAccountId,
+} from "@termkode/shared";
 import { getHomeDirectory } from "./paths";
 
 // Provider keys and the active model live in a single JSON file next to the
@@ -9,6 +15,8 @@ import { getHomeDirectory } from "./paths";
 export type ProviderSettings = {
   apiKey?: string;
   baseUrl?: string;
+  /** Only for providers whose base URL is scoped to an account, e.g. Cloudflare. */
+  accountId?: string;
 };
 
 export type TermkodeSettings = {
@@ -33,6 +41,9 @@ export function readSettings(): TermkodeSettings {
       providers[providerId] = {
         ...(typeof value.apiKey === "string" && value.apiKey ? { apiKey: value.apiKey } : {}),
         ...(typeof value.baseUrl === "string" && value.baseUrl ? { baseUrl: value.baseUrl } : {}),
+        ...(typeof value.accountId === "string" && value.accountId
+          ? { accountId: value.accountId }
+          : {}),
       };
     }
 
@@ -96,6 +107,10 @@ export type ResolvedCredentials = {
   baseUrl: string;
   /** Where the key came from, so the UI can explain what is already set up. */
   source: "config" | "env" | "none";
+  /** The account id in use, for providers scoped to one. */
+  accountId?: string;
+  /** True when the provider needs an account id and none has been given. */
+  accountIdMissing?: boolean;
 };
 
 export function resolveProviderCredentials(providerId: string): ResolvedCredentials | null {
@@ -109,16 +124,32 @@ export function resolveProviderCredentials(providerId: string): ResolvedCredenti
 
   const apiKey = stored?.apiKey ?? envKey;
 
+  // Workers AI is reached through an account-scoped URL, so the account id is
+  // as much a credential as the token: without it there is nowhere to send the
+  // request.
+  const accountId = providerNeedsAccountId(provider)
+    ? stored?.accountId ??
+      provider.accountId?.envVars
+        .map((variable) => process.env[variable])
+        .find((value) => Boolean(value))
+    : undefined;
+
+  const baseUrl =
+    stored?.baseUrl ??
+    (accountId ? applyAccountId(provider.defaultBaseUrl, accountId) : provider.defaultBaseUrl);
+
   return {
     ...(apiKey ? { apiKey } : {}),
-    baseUrl: stored?.baseUrl ?? provider.defaultBaseUrl,
+    baseUrl,
     source: stored?.apiKey ? "config" : envKey ? "env" : "none",
+    ...(accountId ? { accountId } : {}),
+    ...(isAccountIdMissing(baseUrl) ? { accountIdMissing: true } : {}),
   };
 }
 
 export function listConfiguredProviderIds() {
   return CHAT_PROVIDERS.filter((provider) => {
     const credentials = resolveProviderCredentials(provider.id);
-    return Boolean(credentials?.apiKey);
+    return Boolean(credentials?.apiKey) && !credentials?.accountIdMissing;
   }).map((provider) => provider.id);
 }

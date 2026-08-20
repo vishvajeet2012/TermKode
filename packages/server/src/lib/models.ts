@@ -79,6 +79,14 @@ export async function resolveChatModel(
     );
   }
 
+  // An account-scoped provider has nowhere to send the request until the id is
+  // known, and the resulting URL would otherwise contain a literal placeholder.
+  if (credentials.accountIdMissing) {
+    throw new ModelResolutionError(
+      `${provider.label} needs an ${provider.accountId?.label ?? "account id"}. Run /providers to add it, or set ${provider.accountId?.envVars[0] ?? "the account id"}.`,
+    );
+  }
+
   let baseUrl = credentials.baseUrl;
 
   if (provider.isLocal) {

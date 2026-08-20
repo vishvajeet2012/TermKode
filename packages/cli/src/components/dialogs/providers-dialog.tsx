@@ -14,7 +14,7 @@ type ProvidersState = InferResponseType<typeof apiClient.providers.$get, 200>;
 type Provider = ProvidersState["providers"][number];
 type ModelOption = { ref: string; modelId: string };
 
-type Step = "providers" | "apiKey" | "models";
+type Step = "providers" | "accountId" | "apiKey" | "models";
 
 function describeStatus(provider: Provider) {
   if (provider.ready) {
@@ -28,16 +28,30 @@ function describeStatus(provider: Provider) {
   return provider.isLocal ? "not running" : "add key";
 }
 
-type ApiKeyStepProps = {
-  provider: Provider;
+type CredentialStepProps = {
+  prompt: string;
+  help?: string | null;
+  placeholder: string;
   busy: boolean;
+  busyText?: string;
+  footer: string;
   error: string | null;
-  onSubmit: (apiKey: string) => void;
+  onSubmit: (value: string) => void;
 };
 
 // The terminal input reports its value through the renderable, so Enter is
-// handled here rather than through a DOM-style submit event.
-function ApiKeyStep({ provider, busy, error, onSubmit }: ApiKeyStepProps) {
+// handled here rather than through a DOM-style submit event. An API key and an
+// account id are collected the same way, so both use this step.
+function CredentialStep({
+  prompt,
+  help,
+  placeholder,
+  busy,
+  busyText,
+  footer,
+  error,
+  onSubmit,
+}: CredentialStepProps) {
   const inputRef = useRef<InputRenderable>(null);
   const { isTopLayer } = useKeyboardLayer();
 
@@ -53,18 +67,12 @@ function ApiKeyStep({ provider, busy, error, onSubmit }: ApiKeyStepProps) {
 
   return (
     <box flexDirection="column" gap={1}>
-      <text>Paste your {provider.label} API key</text>
-      {provider.apiKeyUrl && (
-        <text attributes={TextAttributes.DIM}>Get one at {provider.apiKeyUrl}</text>
-      )}
-      <input ref={inputRef} focused={!busy} placeholder="sk-..." />
-      {busy && (
-        <text attributes={TextAttributes.DIM}>Verifying key with {provider.label}...</text>
-      )}
+      <text>{prompt}</text>
+      {help && <text attributes={TextAttributes.DIM}>{help}</text>}
+      <input ref={inputRef} focused={!busy} placeholder={placeholder} />
+      {busy && busyText && <text attributes={TextAttributes.DIM}>{busyText}</text>}
       {error && <text fg="red">{error}</text>}
-      <text attributes={TextAttributes.DIM}>
-        enter save · esc cancel · saved to ~/.termkode/config.json
-      </text>
+      <text attributes={TextAttributes.DIM}>{footer}</text>
     </box>
   );
 }
@@ -79,6 +87,9 @@ export function ProvidersDialogContent() {
   const [models, setModels] = useState<ModelOption[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Held between the two steps: an account-scoped provider is saved once, with
+  // both values, so a half-configured provider is never written to disk.
+  const [accountId, setAccountId] = useState("");
 
   useEffect(() => {
     let ignore = false;
@@ -147,7 +158,10 @@ export function ProvidersDialogContent() {
         return;
       }
 
-      setStep("apiKey");
+      // Workers AI is reached through an account-scoped URL, so the account id
+      // is asked for first - without it there is nowhere to verify the key.
+      setAccountId("");
+      setStep(selected.needsAccountId && !selected.hasAccountId ? "accountId" : "apiKey");
     },
     [loadModels],
   );
@@ -164,7 +178,7 @@ export function ProvidersDialogContent() {
         try {
           const response = await apiClient.providers[":id"].$put({
             param: { id: provider.id },
-            json: { apiKey },
+            json: { apiKey, ...(accountId ? { accountId } : {}) },
           });
           if (!response.ok) throw new Error(await getErrorMessage(response));
 
@@ -180,7 +194,7 @@ export function ProvidersDialogContent() {
 
       void save();
     },
-    [provider, busy, toast, openModelStep],
+    [provider, busy, accountId, toast, openModelStep],
   );
 
   const handleSelectModel = useCallback(
@@ -200,11 +214,33 @@ export function ProvidersDialogContent() {
     return <text attributes={TextAttributes.DIM}>Loading providers...</text>;
   }
 
+  if (step === "accountId" && provider) {
+    return (
+      <CredentialStep
+        prompt={`Enter your ${provider.label} ${provider.accountIdLabel ?? "account id"}`}
+        help={provider.accountIdHelp}
+        placeholder="0123456789abcdef0123456789abcdef"
+        busy={false}
+        footer={`enter continue · esc cancel${provider.accountIdEnvVar ? ` · or set ${provider.accountIdEnvVar}` : ""}`}
+        error={error}
+        onSubmit={(value) => {
+          setAccountId(value.trim());
+          setError(null);
+          setStep("apiKey");
+        }}
+      />
+    );
+  }
+
   if (step === "apiKey" && provider) {
     return (
-      <ApiKeyStep
-        provider={provider}
+      <CredentialStep
+        prompt={`Paste your ${provider.label} API key`}
+        help={provider.apiKeyUrl ? `Get one at ${provider.apiKeyUrl}` : null}
+        placeholder="sk-..."
         busy={busy}
+        busyText={`Verifying key with ${provider.label}...`}
+        footer="enter save · esc cancel · saved to ~/.termkode/config.json"
         error={error}
         onSubmit={handleSubmitApiKey}
       />

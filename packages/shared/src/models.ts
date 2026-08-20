@@ -21,6 +21,22 @@ export type ProviderDefinition = {
   isLocal?: boolean;
   /** Lists models without authentication, so a key needs a second check. */
   publicModelListing?: boolean;
+  /**
+   * How the provider's model list is read. Most speak the OpenAI
+   * `GET /models` dialect; Cloudflare keeps its catalogue on a separate
+   * account endpoint, and some providers publish no list at all.
+   */
+  modelListing?: "openai" | "cloudflare";
+  /**
+   * Set when the base URL embeds an account identifier. The identifier is
+   * substituted for ACCOUNT_ID_PLACEHOLDER in `defaultBaseUrl`.
+   */
+  accountId?: {
+    label: string;
+    /** Environment variables accepted as a source, most specific first. */
+    envVars: string[];
+    help: string;
+  };
   /** Shown until the provider's live model list has been fetched. */
   fallbackModels: string[];
   pricing?: Record<string, ModelPricing>;
@@ -205,6 +221,33 @@ const PROVIDER_LIST = [
     fallbackModels: ["glm-4.6", "glm-4.5-air"],
   },
   {
+    id: "cloudflare",
+    label: "Cloudflare (Workers AI)",
+    description: "Open models on Cloudflare's edge network",
+    kind: "openai-compatible",
+    // The account id is substituted before this is ever used for a request.
+    defaultBaseUrl: "https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/v1",
+    apiKeyEnvVars: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_API_KEY"],
+    apiKeyUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    requiresApiKey: true,
+    modelListing: "cloudflare",
+    accountId: {
+      label: "Account ID",
+      envVars: ["CLOUDFLARE_ACCOUNT_ID"],
+      help: "Workers AI is scoped to one account. Copy the id from your Cloudflare dashboard URL, after /accounts/.",
+    },
+    // Only shown until the account's live catalogue has been read. Agent work
+    // needs tool calling, so every model here is one Cloudflare documents as
+    // function-calling capable.
+    fallbackModels: [
+      "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "@cf/openai/gpt-oss-120b",
+      "@cf/openai/gpt-oss-20b",
+      "@cf/qwen/qwen3-30b-a3b-fp8",
+      "@cf/mistralai/mistral-small-3.1-24b-instruct",
+    ],
+  },
+  {
     id: "local",
     label: "Local AI",
     description: "Ollama, LM Studio, llama.cpp, vLLM, or Jan on this machine",
@@ -245,6 +288,23 @@ const LEGACY_MODEL_PROVIDERS: Record<string, string> = {
 
 export function findProvider(providerId: string): ProviderDefinition | undefined {
   return CHAT_PROVIDERS.find((provider) => provider.id === providerId);
+}
+
+/** Stand-in for the account identifier inside a provider's base URL. */
+export const ACCOUNT_ID_PLACEHOLDER = "{accountId}";
+
+export function providerNeedsAccountId(provider: ProviderDefinition) {
+  return provider.defaultBaseUrl.includes(ACCOUNT_ID_PLACEHOLDER);
+}
+
+/** Builds a usable base URL from a provider template and an account id. */
+export function applyAccountId(baseUrl: string, accountId: string) {
+  return baseUrl.split(ACCOUNT_ID_PLACEHOLDER).join(encodeURIComponent(accountId.trim()));
+}
+
+/** True while a base URL still carries the placeholder, i.e. it is unusable. */
+export function isAccountIdMissing(baseUrl: string) {
+  return baseUrl.includes(ACCOUNT_ID_PLACEHOLDER);
 }
 
 export function formatModelRef(providerId: string, modelId: string): ChatModelRef {
