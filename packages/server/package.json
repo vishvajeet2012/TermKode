@@ -17,7 +17,7 @@
     "@ai-sdk/openai-compatible": "^3.0.30",
     "@ai-sdk/provider": "^4.0.3",
     "@ai-sdk/provider-utils": "^5.0.10",
-    "@hono/zod-validator": "^0.8.0",
+    "@hono/zod-validator": "^0.9.0",
     "@termkode/shared": "workspace:*",
     "ai": "^7.0.26",
     "hono": "^4.12.28",
