@@ -39,11 +39,7 @@ const sessionLocationSchema = z.object({
   initialPrompt: initialPromptSchema.optional(),
 });
 
-function ChatMessage(
-  { msg } : {
-    msg: Message
-  }
-) {
+function ChatMessage({ msg }: { msg: Message }) {
   if (msg.role === "user") {
     const text = msg.parts
       .filter((p) => p.type === "text")
@@ -71,7 +67,6 @@ function ChatMessage(
         model={msg.metadata?.model ?? "unknown"}
         mode={msg.metadata?.mode ?? "BUILD"}
         durationMs={msg.metadata?.durationMs}
-        streaming={false}
       />
     </>
   );

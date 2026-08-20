@@ -4,6 +4,7 @@ import { TextAttributes } from "@opentui/core";
 import { Mode, type ModeType } from "@termkode/shared";
 import type { Message } from "../../hooks/use-chat";
 import { useTheme } from "../../providers/theme";
+import { MarkdownText } from "../markdown-text";
 
 type ClientMessagePart = Message["parts"][number];
 type ToolPart = Extract<ClientMessagePart, { type: `tool-${string}` | "dynamic-tool"}>;
@@ -13,7 +14,6 @@ type Props = {
   model: string;
   mode: ModeType;
   durationMs?: number;
-  streaming?: boolean; 
 };
 
 function formatToolName(name: string): string {
@@ -79,7 +79,6 @@ export function BotMessage({
   model,
   mode,
   durationMs,
-  streaming = false,
 }: Props) {
   const { colors } = useTheme();
 
@@ -159,9 +158,11 @@ export function BotMessage({
             }
 
             if (part.type === "text") {
+              // Models answer in markdown, so rendering it as plain text shows
+              // the user `**bold**` and `### Heading` verbatim.
               return (
                 <box key={`text-${j}`} paddingX={3} width="100%">
-                  <text>{part.text}</text>
+                  <MarkdownText content={part.text} />
                 </box>
               )
             }
