@@ -1,0 +1,21 @@
+# The release is built on Linux and its binaries ship to Linux and macOS, so
+# every text file is stored with LF regardless of the platform it was edited on.
+# Without this a shell script committed from Windows arrives with CR line
+# endings and fails on the runner with an unreadable "\r: command not found".
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.md   text eol=lf
+
+# Windows-only scripts keep CRLF, which is what PowerShell expects.
+*.ps1  text eol=crlf
+
+# Binary assets must never be line-ending converted.
+*.png   binary
+*.webp  binary
+*.woff2 binary
+*.exe   binary

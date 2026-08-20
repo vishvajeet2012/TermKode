@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "git log -5 --oneline"
+      }
+    ],
+    "userPromptSubmit": [
+      {
+        "command": "echo \"branch: $(git branch --show-current)\""
+      }
+    ],
+    "preToolUse": [
+      {
+        "matcher": "writeFile|editFile|multiEdit",
+        "command": "if grep -q '\"path\":\"dist/' ; then echo 'dist/ is generated - edit the source instead' >&2; exit 2; fi"
+      }
+    ],
+    "postToolUse": [
+      {
+        "matcher": "writeFile|editFile|multiEdit",
+        "command": "bun run format",
+        "timeout": 60000
+      }
+    ]
+  }
+}
