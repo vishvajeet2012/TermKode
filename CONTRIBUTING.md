@@ -91,6 +91,8 @@ Common variables include:
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Claude chat models |
 | `OPENAI_API_KEY` | ChatGPT chat models |
+| `AWS_BEARER_TOKEN_BEDROCK` | Amazon Bedrock chat models |
+| `AWS_REGION` | Amazon Bedrock region |
 | `DEEPSEEK_API_KEY` | DeepSeek chat models |
 | `QWEN_API_KEY` | Qwen chat models |
 | `KIMI_API_KEY` | Kimi / Moonshot chat models |

@@ -35,7 +35,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
 function BrandWordmark({ large = false }: { large?: boolean }) {
   return (
     <span className={large ? "brand-wordmark brand-wordmark-large" : "brand-wordmark"} role="img" aria-label="TermKode">
-      <span>NEO</span><strong>CODE</strong>
+      <span>TERM</span><strong>KODE</strong>
     </span>
   );
 }

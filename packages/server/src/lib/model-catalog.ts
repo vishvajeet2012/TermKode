@@ -63,6 +63,107 @@ function parseModelList(payload: unknown): string[] {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function includesTextModality(value: unknown) {
+  return Array.isArray(value) && value.some((item) => typeof item === "string" && item.toUpperCase() === "TEXT");
+}
+
+// ListFoundationModels returns every modality. Agent work needs a model that
+// can take a prompt and produce text, so embeddings and image-only entries
+// are dropped here rather than shown in /models.
+export function parseBedrockFoundationModels(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") return [];
+
+  const summaries = (payload as { modelSummaries?: unknown }).modelSummaries;
+  if (!Array.isArray(summaries)) return [];
+
+  return summaries
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .filter((entry) => includesTextModality(entry.inputModalities) && includesTextModality(entry.outputModalities))
+    .map((entry) => entry.modelId)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
+export function parseBedrockInferenceProfiles(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") return [];
+
+  const summaries = (payload as { inferenceProfileSummaries?: unknown }).inferenceProfileSummaries;
+  if (!Array.isArray(summaries)) return [];
+
+  return summaries
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map((entry) => entry.inferenceProfileId)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
+async function fetchJson(
+  url: string,
+  headers: Record<string, string>,
+  label: string,
+): Promise<{ status: number; payload: unknown }> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(LISTING_TIMEOUT_MS),
+    });
+  } catch {
+    throw new ProviderRequestError(`Could not reach ${label}. Check your connection and region.`);
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  return { status: response.status, payload };
+}
+
+async function requestBedrockModelList(
+  label: string,
+  baseUrl: string,
+  headers: Record<string, string>,
+): Promise<string[]> {
+  const foundation = await fetchJson(
+    `${baseUrl}/foundation-models?byOutputModality=TEXT`,
+    headers,
+    label,
+  );
+
+  if (foundation.status === 401) {
+    throw new ProviderRequestError(`${label} rejected this API key.`, 401);
+  }
+
+  // A key can invoke models without being allowed to list them. Treat 403 as
+  // "no catalogue" so /providers can still save the key and use the fallbacks.
+  if (foundation.status === 403) {
+    return [];
+  }
+
+  if (foundation.status !== 200) {
+    throw new ProviderRequestError(
+      `${label} returned ${foundation.status} while listing models.`,
+      foundation.status,
+    );
+  }
+
+  const models = new Set(parseBedrockFoundationModels(foundation.payload));
+
+  try {
+    const profiles = await fetchJson(`${baseUrl}/inference-profiles?maxResults=1000`, headers, label);
+    if (profiles.status === 200) {
+      for (const id of parseBedrockInferenceProfiles(profiles.payload)) {
+        models.add(id);
+      }
+    }
+  } catch {
+    // Inference profiles are extra; the foundation list is enough to go on.
+  }
+
+  return [...models].sort((left, right) => left.localeCompare(right));
+}
+
 async function requestModelList(providerId: string): Promise<string[]> {
   const provider = findProvider(providerId);
   const credentials = resolveProviderCredentials(providerId);
@@ -83,6 +184,10 @@ async function requestModelList(providerId: string): Promise<string[]> {
     throw new ProviderRequestError(
       `${provider.label} needs an ${provider.accountId?.label ?? "account id"} before it can be used.`,
     );
+  }
+
+  if (provider.modelListing === "bedrock") {
+    return requestBedrockModelList(provider.label, credentials.baseUrl, headers);
   }
 
   // Workers AI has no OpenAI-style /models route - a GET there answers 405 -
@@ -208,9 +313,49 @@ export async function verifyProviderCredentials(providerId: string) {
     await requestSmallestCompletion(providerId, resolved[0]);
   }
 
+  // Bedrock often answers 403 to ListFoundationModels even for a usable key,
+  // and also for a garbage bearer token. When the catalogue is empty, a
+  // one-token Converse call is what actually checks the key.
+  if (provider.modelListing === "bedrock" && models.length === 0) {
+    await verifyBedrockApiKey(providerId, resolved[0]);
+  }
+
   return models.length > 0
     ? { models, source: "remote" as const }
     : { models: resolved, source: "fallback" as const };
+}
+
+async function verifyBedrockApiKey(providerId: string, modelId: string | undefined) {
+  const provider = findProvider(providerId);
+  const credentials = resolveProviderCredentials(providerId);
+  if (!provider || !credentials?.apiKey || !credentials.accountId || !modelId) return;
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://bedrock-runtime.${credentials.accountId}.amazonaws.com/model/${encodeURIComponent(modelId)}/converse`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${credentials.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: [{ text: "hi" }] }],
+          inferenceConfig: { maxTokens: 1 },
+        }),
+        signal: AbortSignal.timeout(LISTING_TIMEOUT_MS),
+      },
+    );
+  } catch {
+    throw new ProviderRequestError(
+      `Could not reach ${provider.label}. Check your connection and region.`,
+    );
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new ProviderRequestError(`${provider.label} rejected this API key.`, response.status);
+  }
 }
 
 async function requestSmallestCompletion(providerId: string, modelId: string | undefined) {

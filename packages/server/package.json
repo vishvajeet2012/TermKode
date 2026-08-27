@@ -11,6 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@ai-sdk/amazon-bedrock": "^5.0.14",
     "@ai-sdk/anthropic": "^4.0.14",
     "@ai-sdk/mcp": "^2.0.15",
     "@ai-sdk/openai": "^4.0.13",

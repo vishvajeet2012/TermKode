@@ -28,8 +28,9 @@ The landing page, shared package, and most NeoLens tests need no credentials.
 Chat requires one connected provider. The normal path is `/providers` inside the
 CLI, which verifies the key and writes it to `~/.termkode/config.json`. For CI or
 scripted setups, use the environment variables listed in `.env.example`
-(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `QWEN_API_KEY`,
-`KIMI_API_KEY`, `MINIMAX_API_KEY`).
+(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`,
+`AWS_REGION`, `DEEPSEEK_API_KEY`, `QWEN_API_KEY`, `KIMI_API_KEY`,
+`MINIMAX_API_KEY`).
 
 Running Ollama or LM Studio locally is enough to develop against real models
 without any key: TermKode detects the server and exposes its models.

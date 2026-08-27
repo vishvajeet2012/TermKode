@@ -22,6 +22,19 @@ describe("account-scoped providers", () => {
     expect(provider!.accountId?.envVars).toContain("CLOUDFLARE_ACCOUNT_ID");
   });
 
+  test("Amazon Bedrock is registered and scoped to a region", () => {
+    const provider = findProvider("bedrock");
+    const template = "https://bedrock.{accountId}.amazonaws.com";
+
+    expect(provider).toBeDefined();
+    expect(provider!.defaultBaseUrl).toBe(template);
+    expect(providerNeedsAccountId(provider!)).toBe(true);
+    expect(provider!.accountId?.envVars).toContain("AWS_REGION");
+    expect(applyAccountId(template, "us-east-1")).toBe(
+      "https://bedrock.us-east-1.amazonaws.com",
+    );
+  });
+
   test("providers without an account scope are unaffected", () => {
     expect(providerNeedsAccountId(findProvider("openai")!)).toBe(false);
     expect(providerNeedsAccountId(findProvider("anthropic")!)).toBe(false);

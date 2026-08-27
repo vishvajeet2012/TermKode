@@ -39,7 +39,7 @@ termkode
   shown for approval first, and a checkpoint is taken before each file is
   touched, so `/rewind` puts it back.
 - **No account system.** Nothing to sign up for. Nothing phones home.
-- **Your key, your bill.** Seventeen providers, or a local model for free.
+- **Your key, your bill.** Eighteen providers, or a local model for free.
 - **Local models are first class.** Ollama, LM Studio, llama.cpp, vLLM, and Jan
   are detected automatically — no key, no configuration, no internet.
 - **Model lists are live.** New models appear in `/models` the day the provider
@@ -107,6 +107,7 @@ only by your user. Switch models any time with `/models`.
 | --- | --- | --- |
 | Claude (Anthropic) | `ANTHROPIC_API_KEY` | https://console.anthropic.com/settings/keys |
 | ChatGPT (OpenAI) | `OPENAI_API_KEY` | https://platform.openai.com/api-keys |
+| Amazon Bedrock | `AWS_BEARER_TOKEN_BEDROCK` | https://console.aws.amazon.com/bedrock/home#/api-keys |
 | DeepSeek | `DEEPSEEK_API_KEY` | https://platform.deepseek.com/api_keys |
 | Qwen (Alibaba) | `QWEN_API_KEY` | https://bailian.console.alibabacloud.com |
 | Kimi (Moonshot) | `KIMI_API_KEY` | https://platform.moonshot.ai/console/api-keys |
@@ -125,6 +126,12 @@ only by your user. Switch models any time with `/models`.
 
 Environment variables are read from the shell, a project `.env`, or
 `~/.termkode/.env`. They are handy for CI; `/providers` is easier day to day.
+
+Amazon Bedrock is regional, so `/providers` asks for an AWS region as well as a
+Bedrock API key. Generate a long-term key in the Bedrock console, use the same
+region you created it in (`AWS_REGION`, for example `us-east-1`), and pick a
+model that supports tool use — Claude and Nova Pro do; embeddings and image
+models do not.
 
 Cloudflare is reached through an account-scoped URL, so it asks for a
 `CLOUDFLARE_ACCOUNT_ID` as well as a token — `/providers` prompts for both, and

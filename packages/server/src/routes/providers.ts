@@ -81,6 +81,8 @@ const app = new Hono()
         accountIdLabel: provider.accountId?.label ?? null,
         accountIdHelp: provider.accountId?.help ?? null,
         accountIdEnvVar: provider.accountId?.envVars[0] ?? null,
+        accountIdPlaceholder: provider.accountId?.placeholder ?? null,
+        apiKeyPlaceholder: provider.apiKeyPlaceholder ?? null,
         needsAccountId: providerNeedsAccountId(provider),
         hasAccountId: Boolean(credentials?.accountId),
         ...(provider.isLocal
@@ -110,7 +112,7 @@ const app = new Hono()
     for (const provider of CHAT_PROVIDERS) {
       const credentials = resolveProviderCredentials(provider.id);
       const isReady = provider.requiresApiKey
-        ? Boolean(credentials?.apiKey)
+        ? Boolean(credentials?.apiKey) && !credentials?.accountIdMissing
         : (await detectLocalRuntime()) !== null;
 
       if (!isReady) continue;

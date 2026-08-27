@@ -27,6 +27,56 @@ describe("chat model resolution", () => {
     }
   });
 
+  test("asks for a Bedrock region before building a model", async () => {
+    process.env.AWS_BEARER_TOKEN_BEDROCK = "test-key";
+    const previousRegion = process.env.AWS_REGION;
+    const previousDefault = process.env.AWS_DEFAULT_REGION;
+    delete process.env.AWS_REGION;
+    delete process.env.AWS_DEFAULT_REGION;
+
+    try {
+      await expect(resolveChatModel("bedrock/amazon.nova-lite-v1:0")).rejects.toThrow(
+        /AWS_REGION/,
+      );
+    } finally {
+      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      if (previousRegion === undefined) delete process.env.AWS_REGION;
+      else process.env.AWS_REGION = previousRegion;
+      if (previousDefault === undefined) delete process.env.AWS_DEFAULT_REGION;
+      else process.env.AWS_DEFAULT_REGION = previousDefault;
+    }
+  });
+
+  test("builds a Bedrock model once the key and region are available", async () => {
+    process.env.AWS_BEARER_TOKEN_BEDROCK = "test-key";
+    process.env.AWS_REGION = "us-east-1";
+
+    try {
+      const resolved = await resolveChatModel("bedrock/us.anthropic.claude-sonnet-4-6");
+
+      expect(resolved.provider).toBe("bedrock");
+      expect(resolved.modelId).toBe("us.anthropic.claude-sonnet-4-6");
+    } finally {
+      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      delete process.env.AWS_REGION;
+    }
+  });
+
+  test("routes ChatGPT Luna on Bedrock through the OpenAI-compatible API", async () => {
+    process.env.AWS_BEARER_TOKEN_BEDROCK = "test-key";
+    process.env.AWS_REGION = "ap-south-1";
+
+    try {
+      const resolved = await resolveChatModel("bedrock/in.openai.gpt-5.6-luna");
+
+      expect(resolved.provider).toBe("bedrock");
+      expect(resolved.modelId).toBe("in.openai.gpt-5.6-luna");
+    } finally {
+      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      delete process.env.AWS_REGION;
+    }
+  });
+
   test("keeps resolving model ids stored before providers existed", async () => {
     process.env.ANTHROPIC_API_KEY = "sk-ant-test-key";
 

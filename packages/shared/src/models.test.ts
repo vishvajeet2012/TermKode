@@ -23,6 +23,13 @@ describe("model references", () => {
       providerId: "local",
       modelId: "hf.co/user/model:q4",
     });
+    expect(parseModelRef("bedrock/us.anthropic.claude-sonnet-4-6")).toEqual({
+      providerId: "bedrock",
+      modelId: "us.anthropic.claude-sonnet-4-6",
+    });
+    expect(parseModelRef("bedrock/amazon.nova-pro-v1:0")?.modelId).toBe(
+      "amazon.nova-pro-v1:0",
+    );
   });
 
   test("resolves model ids stored before providers were selectable", () => {
@@ -49,6 +56,7 @@ describe("model references", () => {
     expect(CHAT_PROVIDERS.map((provider) => provider.id)).toEqual([
       "anthropic",
       "openai",
+      "bedrock",
       "deepseek",
       "qwen",
       "kimi",

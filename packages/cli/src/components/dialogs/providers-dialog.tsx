@@ -238,7 +238,7 @@ export function ProvidersDialogContent() {
       <CredentialStep
         prompt={`Enter your ${provider.label} ${provider.accountIdLabel ?? "account id"}`}
         help={provider.accountIdHelp}
-        placeholder="0123456789abcdef0123456789abcdef"
+        placeholder={provider.accountIdPlaceholder ?? "0123456789abcdef0123456789abcdef"}
         busy={false}
         footer={`enter continue · esc cancel${provider.accountIdEnvVar ? ` · or set ${provider.accountIdEnvVar}` : ""}`}
         error={error}
@@ -256,7 +256,7 @@ export function ProvidersDialogContent() {
       <CredentialStep
         prompt={`Paste your ${provider.label} API key`}
         help={provider.apiKeyUrl ? `Get one at ${provider.apiKeyUrl}` : null}
-        placeholder="sk-..."
+        placeholder={provider.apiKeyPlaceholder ?? "sk-..."}
         busy={busy}
         busyText={`Verifying key with ${provider.label}...`}
         footer="enter save · esc cancel · saved to ~/.termkode/config.json"

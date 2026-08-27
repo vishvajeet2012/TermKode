@@ -31,9 +31,9 @@ API key. There is no account, no sign-in, and no usage billing.
 
 Getting started:
   Run termkode, then use /providers to pick a provider (Claude, ChatGPT,
-  DeepSeek, Qwen, Kimi, MiniMax, Grok, NVIDIA, Llama, Groq, OpenRouter,
-  Mistral, Cerebras, Together, GLM, or a local AI server) and paste its API
-  key. Switch models at any time with /models.
+  Amazon Bedrock, DeepSeek, Qwen, Kimi, MiniMax, Grok, NVIDIA, Llama, Groq,
+  OpenRouter, Mistral, Cerebras, Together, GLM, Cloudflare, or a local AI
+  server) and paste its API key. Switch models at any time with /models.
 
 Approvals:
   Writes and shell commands are shown for approval before they run. Choosing
@@ -44,6 +44,8 @@ Approvals:
 Environment (all optional, keys can be added from /providers instead):
   ANTHROPIC_API_KEY  Claude models
   OPENAI_API_KEY     ChatGPT models
+  AWS_BEARER_TOKEN_BEDROCK  Amazon Bedrock models
+  AWS_REGION         Amazon Bedrock region (for example us-east-1)
   DEEPSEEK_API_KEY   DeepSeek models
   QWEN_API_KEY       Qwen models
   KIMI_API_KEY       Kimi / Moonshot models

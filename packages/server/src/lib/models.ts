@@ -1,4 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { findProvider, parseModelRef } from "@termkode/shared";
@@ -47,6 +48,10 @@ function getProviderOptions(
     return thinking && reasoningEffort
       ? { openai: { reasoningEffort, maxCompletionTokens: 10000 } }
       : undefined;
+  }
+
+  if (providerId === "bedrock") {
+    return undefined;
   }
 
   // OpenAI-compatible backends such as Ollama accept reasoning_effort, and
@@ -138,5 +143,33 @@ export async function resolveChatModel(
           apiKey: credentials.apiKey ?? "local",
         })(parsed.modelId),
       };
+    case "bedrock": {
+      const region = credentials.accountId ?? "us-east-1";
+      // OpenAI models on Bedrock (GPT-5.6 Luna/Terra, gpt-oss) speak Chat
+      // Completions, not Converse. Using the Converse SDK returns
+      // "Operation not allowed".
+      if (isBedrockOpenAIModel(parsed.modelId)) {
+        return {
+          ...common,
+          model: createOpenAICompatible({
+            name: "bedrock",
+            baseURL: `https://bedrock-runtime.${region}.amazonaws.com/openai/v1`,
+            apiKey: credentials.apiKey ?? "bedrock",
+          })(parsed.modelId),
+        };
+      }
+
+      return {
+        ...common,
+        model: createAmazonBedrock({
+          region,
+          apiKey: credentials.apiKey,
+        })(parsed.modelId),
+      };
+    }
   }
+}
+
+function isBedrockOpenAIModel(modelId: string) {
+  return /(^|\.)openai\./.test(modelId);
 }

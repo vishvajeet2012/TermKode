@@ -3,9 +3,9 @@ export type ModelPricing = {
   outputUsdPerMillionTokens: number;
 };
 
-// Every provider except Anthropic speaks the OpenAI chat-completions dialect,
-// which is what lets TermKode support new services without new code.
-export type ProviderKind = "anthropic" | "openai" | "openai-compatible";
+// Most providers speak the OpenAI chat-completions dialect. Anthropic and
+// Amazon Bedrock use their own APIs and are wired as separate kinds.
+export type ProviderKind = "anthropic" | "openai" | "openai-compatible" | "bedrock";
 
 export type ProviderDefinition = {
   id: string;
@@ -16,6 +16,8 @@ export type ProviderDefinition = {
   /** Environment variables accepted as a key source, most specific first. */
   apiKeyEnvVars: string[];
   apiKeyUrl?: string;
+  /** Shown while pasting a key, when it is not an `sk-` token. */
+  apiKeyPlaceholder?: string;
   requiresApiKey: boolean;
   /** Discovered on the local network instead of configured by hand. */
   isLocal?: boolean;
@@ -26,7 +28,7 @@ export type ProviderDefinition = {
    * `GET /models` dialect; Cloudflare keeps its catalogue on a separate
    * account endpoint, and some providers publish no list at all.
    */
-  modelListing?: "openai" | "cloudflare";
+  modelListing?: "openai" | "cloudflare" | "bedrock";
   /**
    * Set when the base URL embeds an account identifier. The identifier is
    * substituted for ACCOUNT_ID_PLACEHOLDER in `defaultBaseUrl`.
@@ -36,6 +38,8 @@ export type ProviderDefinition = {
     /** Environment variables accepted as a source, most specific first. */
     envVars: string[];
     help: string;
+    /** Shown in the setup prompt, e.g. a region or a hex account id. */
+    placeholder?: string;
   };
   /** Shown until the provider's live model list has been fetched. */
   fallbackModels: string[];
@@ -74,6 +78,33 @@ const PROVIDER_LIST = [
       "gpt-5.4-mini": { inputUsdPerMillionTokens: 0.75, outputUsdPerMillionTokens: 4.5 },
       "gpt-5.4-nano": { inputUsdPerMillionTokens: 0.2, outputUsdPerMillionTokens: 1.25 },
     },
+  },
+  {
+    id: "bedrock",
+    label: "Amazon Bedrock",
+    description: "Claude, Nova, Llama, and other models on AWS Bedrock",
+    kind: "bedrock",
+    // Control-plane host used to list models. Chat goes through the Bedrock
+    // runtime SDK, which takes the region on its own.
+    defaultBaseUrl: "https://bedrock.{accountId}.amazonaws.com",
+    apiKeyEnvVars: ["AWS_BEARER_TOKEN_BEDROCK", "BEDROCK_API_KEY"],
+    apiKeyUrl: "https://console.aws.amazon.com/bedrock/home#/api-keys",
+    apiKeyPlaceholder: "ABSK...",
+    requiresApiKey: true,
+    modelListing: "bedrock",
+    accountId: {
+      label: "AWS Region",
+      envVars: ["AWS_REGION", "AWS_DEFAULT_REGION"],
+      help: "Bedrock is regional. Use the region you generated the API key in, for example us-east-1.",
+      placeholder: "us-east-1",
+    },
+    fallbackModels: [
+      "us.anthropic.claude-opus-4-6",
+      "us.anthropic.claude-sonnet-4-6",
+      "us.anthropic.claude-haiku-4-5",
+      "amazon.nova-pro-v1:0",
+      "amazon.nova-lite-v1:0",
+    ],
   },
   {
     id: "deepseek",
