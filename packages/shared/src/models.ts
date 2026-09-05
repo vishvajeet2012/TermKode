@@ -99,9 +99,9 @@ const PROVIDER_LIST = [
       placeholder: "us-east-1",
     },
     fallbackModels: [
-      "us.anthropic.claude-opus-4-6",
+      "us.openai.gpt-5.6-luna",
+      "global.openai.gpt-5.6-luna",
       "us.anthropic.claude-sonnet-4-6",
-      "us.anthropic.claude-haiku-4-5",
       "amazon.nova-pro-v1:0",
       "amazon.nova-lite-v1:0",
     ],

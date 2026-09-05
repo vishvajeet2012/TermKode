@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ModelResolutionError, resolveChatModel } from "./models";
 
 describe("chat model resolution", () => {
@@ -28,9 +31,12 @@ describe("chat model resolution", () => {
   });
 
   test("asks for a Bedrock region before building a model", async () => {
-    process.env.AWS_BEARER_TOKEN_BEDROCK = "test-key";
+    const home = mkdtempSync(join(tmpdir(), "termkode-bedrock-region-"));
+    const previousHome = process.env.TERMKODE_HOME;
     const previousRegion = process.env.AWS_REGION;
     const previousDefault = process.env.AWS_DEFAULT_REGION;
+    process.env.TERMKODE_HOME = home;
+    process.env.AWS_BEARER_TOKEN_BEDROCK = "test-key";
     delete process.env.AWS_REGION;
     delete process.env.AWS_DEFAULT_REGION;
 
@@ -40,10 +46,13 @@ describe("chat model resolution", () => {
       );
     } finally {
       delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      if (previousHome === undefined) delete process.env.TERMKODE_HOME;
+      else process.env.TERMKODE_HOME = previousHome;
       if (previousRegion === undefined) delete process.env.AWS_REGION;
       else process.env.AWS_REGION = previousRegion;
       if (previousDefault === undefined) delete process.env.AWS_DEFAULT_REGION;
       else process.env.AWS_DEFAULT_REGION = previousDefault;
+      rmSync(home, { recursive: true, force: true });
     }
   });
 
@@ -62,15 +71,15 @@ describe("chat model resolution", () => {
     }
   });
 
-  test("routes ChatGPT Luna on Bedrock through the OpenAI-compatible API", async () => {
+  test("routes ChatGPT Luna on Bedrock through the Responses API", async () => {
     process.env.AWS_BEARER_TOKEN_BEDROCK = "test-key";
     process.env.AWS_REGION = "ap-south-1";
 
     try {
-      const resolved = await resolveChatModel("bedrock/in.openai.gpt-5.6-luna");
+      const resolved = await resolveChatModel("bedrock/us.openai.gpt-5.6-luna");
 
       expect(resolved.provider).toBe("bedrock");
-      expect(resolved.modelId).toBe("in.openai.gpt-5.6-luna");
+      expect(resolved.modelId).toBe("us.openai.gpt-5.6-luna");
     } finally {
       delete process.env.AWS_BEARER_TOKEN_BEDROCK;
       delete process.env.AWS_REGION;

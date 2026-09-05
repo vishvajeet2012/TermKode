@@ -145,15 +145,28 @@ export async function resolveChatModel(
       };
     case "bedrock": {
       const region = credentials.accountId ?? "us-east-1";
-      // OpenAI models on Bedrock (GPT-5.6 Luna/Terra, gpt-oss) speak Chat
-      // Completions, not Converse. Using the Converse SDK returns
-      // "Operation not allowed".
+      const openaiBaseUrl = `https://bedrock-runtime.${region}.amazonaws.com/openai/v1`;
+
+      // GPT-5.6 on Bedrock (Luna/Terra/Sol) is documented against the
+      // Responses API, not Chat Completions. Chat Completions returns
+      // "Operation not allowed" for these IDs.
+      if (isBedrockGpt56Model(parsed.modelId)) {
+        return {
+          ...common,
+          model: createOpenAI({
+            apiKey: credentials.apiKey,
+            baseURL: openaiBaseUrl,
+          }).responses(parsed.modelId),
+        };
+      }
+
+      // Other OpenAI-prefixed Bedrock models (gpt-oss) still use Chat Completions.
       if (isBedrockOpenAIModel(parsed.modelId)) {
         return {
           ...common,
           model: createOpenAICompatible({
             name: "bedrock",
-            baseURL: `https://bedrock-runtime.${region}.amazonaws.com/openai/v1`,
+            baseURL: openaiBaseUrl,
             apiKey: credentials.apiKey ?? "bedrock",
           })(parsed.modelId),
         };
@@ -172,4 +185,8 @@ export async function resolveChatModel(
 
 function isBedrockOpenAIModel(modelId: string) {
   return /(^|\.)openai\./.test(modelId);
+}
+
+function isBedrockGpt56Model(modelId: string) {
+  return /openai\.gpt-5\.6/.test(modelId);
 }
